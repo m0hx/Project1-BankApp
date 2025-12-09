@@ -1,7 +1,7 @@
 # Project 1 - Bank App
 
 # Trello
-[https://trello.com/b/Lk6OxxIR/project-1-java](https://trello.com/b/Lk6OxxIR/project-1-bankapp)
+[https://trello.com/b/Lk6OxxIR/project-1-bankapp](https://trello.com/b/Lk6OxxIR/project-1-bankapp)
 
 # Technologies Used / Plan to Use:
 JDK: Oracle OpenJDK 17.0.17  
