@@ -4,8 +4,8 @@
 [https://trello.com/b/Lk6OxxIR/project-1-java](https://trello.com/b/Lk6OxxIR/project-1-bankapp)
 
 # Technologies Used / Plan to Use:
-JDK: Oracle OpenJDK 17.0.17
-IDE: IntelliJ IDEA Community 2025.3
+JDK: Oracle OpenJDK 17.0.17  
+IDE: IntelliJ IDEA Community 2025.3  
 
 # User Stories
 1. **Access**
@@ -57,11 +57,11 @@ IDE: IntelliJ IDEA Community 2025.3
 # ERD diagram (in progress)
 
 # Additional Resources
-https://www.mindrot.org/projects/jBCrypt/#download
-https://www.tutorialspoint.com/pdfbox/index.htm
-https://pdfbox.apache.org/download.html
-https://commons.apache.org/logging/download_logging.cgi (commons-logging-1.3.5.jar / fontbox-3.0.6.jar / pdfbox-3.0.6.jar / pdfbox-io-3.0.6.jar)
-https://www.baeldung.com/java-aes-encryption-decryption
-https://medium.com/@johnvazna/implementing-local-aes-gcm-encryption-and-decryption-in-java-ac1dacaaa409
+https://www.mindrot.org/projects/jBCrypt/#download  
+https://www.tutorialspoint.com/pdfbox/index.htm  
+https://pdfbox.apache.org/download.html  
+https://commons.apache.org/logging/download_logging.cgi (commons-logging-1.3.5.jar / fontbox-3.0.6.jar / pdfbox-3.0.6.jar / pdfbox-io-3.0.6.jar)  
+https://www.baeldung.com/java-aes-encryption-decryption  
+https://medium.com/@johnvazna/implementing-local-aes-gcm-encryption-and-decryption-in-java-ac1dacaaa409  
 
 
