@@ -58,6 +58,7 @@ IDE: IntelliJ IDEA Community 2025.3
 
 # Additional Resources
 https://www.mindrot.org/projects/jBCrypt/#download  
+https://mvnrepository.com/artifact/org.mindrot/jbcrypt/0.4  
 https://www.tutorialspoint.com/pdfbox/index.htm  
 https://pdfbox.apache.org/download.html  
 https://commons.apache.org/logging/download_logging.cgi (commons-logging-1.3.5.jar / fontbox-3.0.6.jar / pdfbox-3.0.6.jar / pdfbox-io-3.0.6.jar)  
