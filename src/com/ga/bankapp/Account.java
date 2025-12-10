@@ -4,18 +4,22 @@ public abstract class Account {
 
     // Fields
     protected int accountId;
+    protected int customerId; // Which customer owns this account
     protected double balance;
     protected String accountType; // "CHECKING" or "SAVINGS"
     protected boolean isActive; // For overdraft deactivation
     protected int overdraftCount; // Track number of overdrafts
+    protected DebitCard debitCard; // Debit card assigned to this account
 
     // Constructor
-    public Account(int accountId, double balance, String accountType) {
+    public Account(int accountId, int customerId, double balance, String accountType, DebitCard debitCard) {
         this.accountId = accountId;
+        this.customerId = customerId;
         this.balance = balance;
         this.accountType = accountType;
         this.isActive = true; // Account starts active
         this.overdraftCount = 0; // No overdrafts initially
+        this.debitCard = debitCard;
     }
 
     // Abstract methods (must be implemented by subclasses)
@@ -53,6 +57,18 @@ public abstract class Account {
 
     public void incrementOverdraftCount() {
         this.overdraftCount++;
+    }
+    
+    public int getCustomerId() {
+        return customerId;
+    }
+    
+    public DebitCard getDebitCard() {
+        return debitCard;
+    }
+    
+    public void setBalance(double balance) {
+        this.balance = balance;
     }
 
 }

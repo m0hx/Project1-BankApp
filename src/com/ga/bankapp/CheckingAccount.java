@@ -3,8 +3,8 @@ package com.ga.bankapp;
 public class CheckingAccount extends Account {
 
     // Constructor
-    public CheckingAccount(int accountId, double balance) {
-        super(accountId, balance, "CHECKING");
+    public CheckingAccount(int accountId, int customerId, double balance, DebitCard debitCard) {
+        super(accountId, customerId, balance, "CHECKING", debitCard);
     }
 
     // Implement abstract deposit method
