@@ -1,5 +1,6 @@
 package com.ga.bankapp;
 
+import org.mindrot.jbcrypt.BCrypt;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +45,20 @@ public class Main {
         scanner.close();
     }
 
+    // Hash password using BCrypt
+    static String hashPassword(String plainPassword) {
+        return BCrypt.hashpw(plainPassword, BCrypt.gensalt());
+    }
+
+    // Verify password against hash
+    static boolean verifyPassword(String plainPassword, String hashedPassword) {
+        try {
+            return BCrypt.checkpw(plainPassword, hashedPassword);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     // Save user to encrypted file
     // Format: ID,firstName,lastName,password,balance,role (like data.txt)
     private static void saveUser(User user) {
@@ -57,11 +72,13 @@ public class Main {
             }
             
             // Format: ID,firstName,lastName,password,balance,role
-            // balance is 0 for now (we'll add accounts later)
+            // Always hash password before saving
+            String passwordToSave = hashPassword(user.getPassword());
+            
             String content = user.getId() + "," + 
                            user.getFirstName() + "," + 
                            user.getLastName() + "," + 
-                           user.getPassword() + "," + 
+                           passwordToSave + "," + 
                            "0," + // balance placeholder
                            user.getRole();
             

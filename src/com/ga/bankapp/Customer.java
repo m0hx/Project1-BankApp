@@ -1,5 +1,6 @@
 package com.ga.bankapp;
 
+import org.mindrot.jbcrypt.BCrypt;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -56,8 +57,12 @@ public class Customer implements User {
 
     @Override
     public boolean login(String password) {
-        // Check if password matches
-        return this.password.equals(password);
+        // Verify password using BCrypt
+        try {
+            return BCrypt.checkpw(password, this.password);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     public List<Account> getAccounts() {

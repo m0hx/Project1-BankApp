@@ -1,5 +1,7 @@
 package com.ga.bankapp;
 
+import org.mindrot.jbcrypt.BCrypt;
+
 public class Banker implements User {
     // Fields
     private int id;
@@ -51,7 +53,11 @@ public class Banker implements User {
 
     @Override
     public boolean login(String password) {
-        // Check if password matches
-        return this.password.equals(password);
+        // Verify password using BCrypt
+        try {
+            return BCrypt.checkpw(password, this.password);
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
