@@ -18,14 +18,14 @@ import java.util.Map;
 import java.util.Scanner;
 
 public class Main {
-    private static List<User> users = new ArrayList<>();
-    private static Scanner scanner = new Scanner(System.in);
+    private static final List<User> users = new ArrayList<>();
+    private static final Scanner scanner = new Scanner(System.in);
     
     // Fraud detection: Track failed login attempts per user ID
-    private static Map<Integer, Integer> failedAttempts = new HashMap<>();
+    private static final Map<Integer, Integer> failedAttempts = new HashMap<>();
     
     // Fraud detection: Track lockout times (user ID -> lockout timestamp in milliseconds)
-    private static Map<Integer, Long> lockoutTimes = new HashMap<>();
+    private static final Map<Integer, Long> lockoutTimes = new HashMap<>();
     
     // Constants for fraud detection
     private static final int MAX_FAILED_ATTEMPTS = 3;
@@ -33,7 +33,7 @@ public class Main {
     
     // Daily transaction limits tracking
     // Map: accountId -> DailyLimits object
-    private static Map<Integer, DailyLimits> dailyLimits = new HashMap<>();
+    private static final Map<Integer, DailyLimits> dailyLimits = new HashMap<>();
     
     /**
      * Inner class to track daily transaction amounts per account
@@ -51,14 +51,6 @@ public class Main {
         
         boolean isToday() {
             return date.equals(LocalDate.now());
-        }
-        
-        void reset() {
-            date = LocalDate.now();
-            dailyWithdraw = 0;
-            dailyDeposit = 0;
-            dailyTransfer = 0;
-            dailyTransferOwn = 0;
         }
     }
 
@@ -533,9 +525,9 @@ public class Main {
             return;
         }
         
-        // Check daily deposit limit (regular deposit, not own account)
+        // Check daily deposit limit
         try {
-            checkDailyDepositLimit(account, amount, false);
+            checkDailyDepositLimit(account, amount);
         } catch (Exception e) {
             System.out.println("\nError: " + e.getMessage());
             return;
@@ -929,7 +921,10 @@ public class Main {
             String pdfDir = "data/pdf";
             File pdfDirectory = new File(pdfDir);
             if (!pdfDirectory.exists()) {
-                pdfDirectory.mkdirs();
+                boolean created = pdfDirectory.mkdirs();
+                if (!created && !pdfDirectory.exists()) {
+                    throw new IOException("Failed to create PDF directory: " + pdfDir);
+                }
             }
             
             // Save PDF with timestamp to avoid overwriting
@@ -1213,8 +1208,7 @@ public class Main {
         
         // Check all customers' accounts in memory
         for (User user : users) {
-            if (user instanceof Customer) {
-                Customer customer = (Customer) user;
+            if (user instanceof Customer customer) {
                 for (Account acc : customer.getAccounts()) {
                     if (acc.getAccountId() > maxId) {
                         maxId = acc.getAccountId();
@@ -1271,15 +1265,13 @@ public class Main {
     }
     
     // Check daily deposit limit
-    private static void checkDailyDepositLimit(Account account, double amount, boolean isOwnAccount) throws Exception {
+    private static void checkDailyDepositLimit(Account account, double amount) throws Exception {
         if (account.getDebitCard() == null) {
             throw new Exception("Account does not have a debit card");
         }
         
         DailyLimits limits = getDailyLimits(account.getAccountId());
-        double limit = isOwnAccount ? 
-            account.getDebitCard().getDepositLimitPerDayOwnAccount() :
-            account.getDebitCard().getDepositLimitPerDay();
+        double limit = account.getDebitCard().getDepositLimitPerDay();
         
         double newTotal = limits.dailyDeposit + amount;
         
