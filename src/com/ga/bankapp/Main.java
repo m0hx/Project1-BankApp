@@ -8,6 +8,7 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import java.io.File;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -29,6 +30,37 @@ public class Main {
     // Constants for fraud detection
     private static final int MAX_FAILED_ATTEMPTS = 3;
     private static final long LOCKOUT_DURATION_MS = 60000; // 1 minute in milliseconds
+    
+    // Daily transaction limits tracking
+    // Map: accountId -> DailyLimits object
+    private static Map<Integer, DailyLimits> dailyLimits = new HashMap<>();
+    
+    /**
+     * Inner class to track daily transaction amounts per account
+     */
+    private static class DailyLimits {
+        LocalDate date;
+        double dailyWithdraw = 0;
+        double dailyDeposit = 0;
+        double dailyTransfer = 0;
+        double dailyTransferOwn = 0;
+        
+        DailyLimits() {
+            this.date = LocalDate.now();
+        }
+        
+        boolean isToday() {
+            return date.equals(LocalDate.now());
+        }
+        
+        void reset() {
+            date = LocalDate.now();
+            dailyWithdraw = 0;
+            dailyDeposit = 0;
+            dailyTransfer = 0;
+            dailyTransferOwn = 0;
+        }
+    }
 
     public static void main(String[] args) {
         // Load users from encrypted files (if they exist)
@@ -458,8 +490,18 @@ public class Main {
             return;
         }
         
+        // Check daily withdraw limit
+        try {
+            checkDailyWithdrawLimit(account, amount);
+        } catch (Exception e) {
+            System.out.println("\nError: " + e.getMessage());
+            return;
+        }
+        
         // Perform withdrawal
         if (account.withdraw(amount)) {
+            // Update daily limit tracking
+            updateDailyWithdraw(account.getAccountId(), amount);
             // Save account after transaction
             saveAccount(account);
             
@@ -491,8 +533,18 @@ public class Main {
             return;
         }
         
+        // Check daily deposit limit (regular deposit, not own account)
+        try {
+            checkDailyDepositLimit(account, amount, false);
+        } catch (Exception e) {
+            System.out.println("\nError: " + e.getMessage());
+            return;
+        }
+        
         // Perform deposit
         if (account.deposit(amount)) {
+            // Update daily limit tracking
+            updateDailyDeposit(account.getAccountId(), amount);
             // Save account after transaction
             saveAccount(account);
             
@@ -553,9 +605,20 @@ public class Main {
                 return;
             }
             
+            // Check daily transfer limit (own account)
+            try {
+                checkDailyTransferLimit(fromAccount, amount, true);
+            } catch (Exception e) {
+                System.out.println("\nError: " + e.getMessage());
+                return;
+            }
+            
             // Perform transfer
             fromAccount.withdraw(amount);
             toAccount.deposit(amount);
+            
+            // Update daily limit tracking (own account transfer)
+            updateDailyTransferOwn(fromAccount.getAccountId(), amount);
             
             // Save both accounts
             saveAccount(fromAccount);
@@ -601,9 +664,20 @@ public class Main {
                 }
             }
             
+            // Check daily transfer limit (to other customer)
+            try {
+                checkDailyTransferLimit(fromAccount, amount, false);
+            } catch (Exception e) {
+                System.out.println("\nError: " + e.getMessage());
+                return;
+            }
+            
             // Perform transfer
             fromAccount.withdraw(amount);
             toAccount.deposit(amount);
+            
+            // Update daily limit tracking (regular transfer)
+            updateDailyTransfer(fromAccount.getAccountId(), amount);
             
             // Save both accounts
             saveAccount(fromAccount);
@@ -1176,6 +1250,101 @@ public class Main {
         }
         
         return maxId + 1;
+    }
+    
+    // Check daily withdraw limit
+    private static void checkDailyWithdrawLimit(Account account, double amount) throws Exception {
+        if (account.getDebitCard() == null) {
+            throw new Exception("Account does not have a debit card");
+        }
+        
+        DailyLimits limits = getDailyLimits(account.getAccountId());
+        double newTotal = limits.dailyWithdraw + amount;
+        double limit = account.getDebitCard().getWithdrawLimitPerDay();
+        
+        if (newTotal > limit) {
+            throw new Exception("Daily withdrawal limit exceeded. Limit: $" + 
+                String.format("%.2f", limit) + ". Already used: $" + 
+                String.format("%.2f", limits.dailyWithdraw) + ". Remaining: $" + 
+                String.format("%.2f", limit - limits.dailyWithdraw));
+        }
+    }
+    
+    // Check daily deposit limit
+    private static void checkDailyDepositLimit(Account account, double amount, boolean isOwnAccount) throws Exception {
+        if (account.getDebitCard() == null) {
+            throw new Exception("Account does not have a debit card");
+        }
+        
+        DailyLimits limits = getDailyLimits(account.getAccountId());
+        double limit = isOwnAccount ? 
+            account.getDebitCard().getDepositLimitPerDayOwnAccount() :
+            account.getDebitCard().getDepositLimitPerDay();
+        
+        double newTotal = limits.dailyDeposit + amount;
+        
+        if (newTotal > limit) {
+            throw new Exception("Daily deposit limit exceeded. Limit: $" + 
+                String.format("%.2f", limit) + ". Already used: $" + 
+                String.format("%.2f", limits.dailyDeposit) + ". Remaining: $" + 
+                String.format("%.2f", limit - limits.dailyDeposit));
+        }
+    }
+    
+    // Check daily transfer limit
+    private static void checkDailyTransferLimit(Account account, double amount, boolean isOwnAccount) throws Exception {
+        if (account.getDebitCard() == null) {
+            throw new Exception("Account does not have a debit card");
+        }
+        
+        DailyLimits limits = getDailyLimits(account.getAccountId());
+        double limit = isOwnAccount ?
+            account.getDebitCard().getTransferLimitPerDayOwnAccount() :
+            account.getDebitCard().getTransferLimitPerDay();
+        
+        double currentTotal = isOwnAccount ? limits.dailyTransferOwn : limits.dailyTransfer;
+        double newTotal = currentTotal + amount;
+        
+        if (newTotal > limit) {
+            throw new Exception("Daily transfer limit exceeded. Limit: $" + 
+                String.format("%.2f", limit) + ". Already used: $" + 
+                String.format("%.2f", currentTotal) + ". Remaining: $" + 
+                String.format("%.2f", limit - currentTotal));
+        }
+    }
+    
+    // Get or create daily limits tracker
+    private static DailyLimits getDailyLimits(int accountId) {
+        DailyLimits limits = dailyLimits.get(accountId);
+        if (limits == null || !limits.isToday()) {
+            limits = new DailyLimits();
+            dailyLimits.put(accountId, limits);
+        }
+        return limits;
+    }
+    
+    // Update daily withdraw amount
+    private static void updateDailyWithdraw(int accountId, double amount) {
+        DailyLimits limits = getDailyLimits(accountId);
+        limits.dailyWithdraw += amount;
+    }
+    
+    // Update daily deposit amount
+    private static void updateDailyDeposit(int accountId, double amount) {
+        DailyLimits limits = getDailyLimits(accountId);
+        limits.dailyDeposit += amount;
+    }
+    
+    // Update daily transfer amount (regular)
+    private static void updateDailyTransfer(int accountId, double amount) {
+        DailyLimits limits = getDailyLimits(accountId);
+        limits.dailyTransfer += amount;
+    }
+    
+    // Update daily transfer amount (own account)
+    private static void updateDailyTransferOwn(int accountId, double amount) {
+        DailyLimits limits = getDailyLimits(accountId);
+        limits.dailyTransferOwn += amount;
     }
     
     // Save account to encrypted file
