@@ -14,7 +14,7 @@ Libraries (Project Structure -> Libraries -> add) :
 **fontbox-3.0.6.jar**  
 **commons-logging-1.3.5.jar**  
 
-[hr]
+<hr>
 
 # Test Accounts
 [Banker]
@@ -29,7 +29,7 @@ pw: 0000
 id: 10003
 pw: 0000
 
-[hr]
+<hr>
 
 # User Stories
 1. **Access**
