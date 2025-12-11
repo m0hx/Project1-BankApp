@@ -17,18 +17,18 @@ Libraries (Project Structure -> Libraries -> add) :
 <hr>
 
 # Test Accounts
-[Banker]
-id: 10001
-pw: 0000
-
-[Customer1]
-id: 10002
-pw: 0000
-
-[Customer2]
-id: 10003
-pw: 0000
-
+[Banker]  
+id: 10001  
+pw: 0000  
+  
+[Customer1]  
+id: 10002  
+pw: 0000  
+  
+[Customer2]  
+id: 10003  
+pw: 0000  
+  
 <hr>
 
 # User Stories
