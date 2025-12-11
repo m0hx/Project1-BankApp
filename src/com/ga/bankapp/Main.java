@@ -3,12 +3,24 @@ package com.ga.bankapp;
 import org.mindrot.jbcrypt.BCrypt;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 
 public class Main {
     private static List<User> users = new ArrayList<>();
     private static Scanner scanner = new Scanner(System.in);
+    
+    // Fraud detection: Track failed login attempts per user ID
+    private static Map<Integer, Integer> failedAttempts = new HashMap<>();
+    
+    // Fraud detection: Track lockout times (user ID -> lockout timestamp in milliseconds)
+    private static Map<Integer, Long> lockoutTimes = new HashMap<>();
+    
+    // Constants for fraud detection
+    private static final int MAX_FAILED_ATTEMPTS = 3;
+    private static final long LOCKOUT_DURATION_MS = 60000; // 1 minute in milliseconds
 
     public static void main(String[] args) {
         // Load users from encrypted files (if they exist)
@@ -208,11 +220,19 @@ public class Main {
         }
     }
 
-    // Login method
+    // Login method with fraud detection
     private static void login() {
         System.out.print("Enter user ID: ");
         int userId = scanner.nextInt();
         scanner.nextLine(); // Consume newline
+        
+        // Check if account is currently locked
+        if (isAccountLocked(userId)) {
+            long remainingTime = getRemainingLockoutTime(userId);
+            System.out.println("\nAccount is locked due to multiple failed login attempts.");
+            System.out.println("Please try again in " + (remainingTime / 1000) + " seconds.");
+            return;
+        }
         
         System.out.print("Enter password: ");
         String password = scanner.nextLine();
@@ -228,6 +248,10 @@ public class Main {
         
         // Check if user exists and password is correct
         if (foundUser != null && foundUser.login(password)) {
+            // Successful login - reset failed attempts and remove lockout
+            failedAttempts.remove(userId);
+            lockoutTimes.remove(userId);
+            
             System.out.println("\nLogin successful!");
             System.out.println("Welcome, " + foundUser.getFirstName() + " " + foundUser.getLastName() + "!");
             
@@ -238,7 +262,69 @@ public class Main {
                 customerMenu((Customer) foundUser);
             }
         } else {
-            System.out.println("Login failed! Invalid user ID or password.");
+            // Failed login - record attempt
+            recordFailedAttempt(userId);
+        }
+    }
+    
+    /**
+     * Check if account is currently locked
+     */
+    private static boolean isAccountLocked(int userId) {
+        if (!lockoutTimes.containsKey(userId)) {
+            return false; // No lockout
+        }
+        
+        long lockoutTime = lockoutTimes.get(userId);
+        long currentTime = System.currentTimeMillis();
+        long elapsed = currentTime - lockoutTime;
+        
+        // If lockout period has passed, remove from map
+        if (elapsed >= LOCKOUT_DURATION_MS) {
+            lockoutTimes.remove(userId);
+            failedAttempts.remove(userId); // Also reset attempt counter
+            return false; // No longer locked
+        }
+        
+        return true; // Still locked
+    }
+    
+    /**
+     * Get remaining lockout time in milliseconds
+     */
+    private static long getRemainingLockoutTime(int userId) {
+        if (!lockoutTimes.containsKey(userId)) {
+            return 0;
+        }
+        
+        long lockoutTime = lockoutTimes.get(userId);
+        long currentTime = System.currentTimeMillis();
+        long elapsed = currentTime - lockoutTime;
+        long remaining = LOCKOUT_DURATION_MS - elapsed;
+        
+        return remaining > 0 ? remaining : 0;
+    }
+    
+    /**
+     * Record a failed login attempt and lock account if threshold reached
+     */
+    private static void recordFailedAttempt(int userId) {
+        int attempts = failedAttempts.getOrDefault(userId, 0) + 1;
+        failedAttempts.put(userId, attempts);
+        
+        int remainingAttempts = MAX_FAILED_ATTEMPTS - attempts;
+        
+        if (attempts >= MAX_FAILED_ATTEMPTS) {
+            // Lock the account for 1 minute
+            lockoutTimes.put(userId, System.currentTimeMillis());
+            failedAttempts.put(userId, 0); // Reset counter (will be cleared after lockout)
+            
+            System.out.println("\nLogin failed! Invalid user ID or password.");
+            System.out.println("Account locked for 1 minute due to " + MAX_FAILED_ATTEMPTS + " failed login attempts.");
+            System.out.println("Please try again after 1 minute.");
+        } else {
+            System.out.println("\nLogin failed! Invalid user ID or password.");
+            System.out.println(remainingAttempts + " attempt(s) remaining before account lockout.");
         }
     }
     
@@ -282,7 +368,8 @@ public class Main {
             System.out.println("3. Deposit Money");
             System.out.println("4. Transfer Money");
             System.out.println("5. View Transaction History");
-            System.out.println("6. Logout");
+            System.out.println("6. View Account Statement");
+            System.out.println("7. Logout");
             System.out.print("Choose an option: ");
             
             int choice = scanner.nextInt();
@@ -305,6 +392,9 @@ public class Main {
                     viewTransactionHistory(customer);
                     break;
                 case 6:
+                    viewAccountStatement(customer);
+                    break;
+                case 7:
                     System.out.println("Logged out successfully.");
                     inMenu = false;
                     break;
@@ -564,6 +654,65 @@ public class Main {
         System.out.println("\nRecent transactions:");
         for (Transaction transaction : transactions) {
             System.out.println(transaction.toString());
+        }
+    }
+    
+    // View detailed account statement
+    private static void viewAccountStatement(Customer customer) {
+        System.out.println("\n[Account Statement]");
+        
+        // Select account
+        Account account = selectAccount(customer);
+        if (account == null) {
+            return;
+        }
+        
+        // Load all transactions for this customer
+        List<Transaction> allTransactions = loadTransactions(customer.getId());
+        
+        // Filter transactions for this specific account
+        List<Transaction> accountTransactions = new ArrayList<>();
+        for (Transaction transaction : allTransactions) {
+            if (transaction.getAccountId() == account.getAccountId()) {
+                accountTransactions.add(transaction);
+            }
+        }
+        
+        // Display account statement
+        System.out.println("\n[Account Statement]");
+        System.out.println("\nAccount Information:");
+        System.out.println("Account ID: " + account.getAccountId());
+        System.out.println("Account Type: " + account.getAccountType());
+        System.out.println("Debit Card: " + account.getDebitCard().getCardType());
+        System.out.println("Status: " + (account.isActive() ? "Active" : "Deactivated"));
+        System.out.println("Current Balance: $" + String.format("%.2f", account.getBalance()));
+        
+        System.out.println("\nTransaction History:");
+        
+        if (accountTransactions.isEmpty()) {
+            System.out.println("No transactions found for this account.");
+        } else {
+            System.out.println("\nDate & Time          | Type      | Amount      | Balance After");
+            System.out.println("------------------------------------------------------------");
+            
+            for (Transaction transaction : accountTransactions) {
+                String dateTime = transaction.getFormattedDateTime();
+                String type = transaction.getType();
+                String amount = "$" + String.format("%.2f", transaction.getAmount());
+                String balance = "$" + String.format("%.2f", transaction.getPostBalance());
+                
+                // Format with proper spacing
+                System.out.printf("%-20s | %-9s | %-11s | %s", dateTime, type, amount, balance);
+                
+                // Show recipient for transfers
+                if (transaction.getRecipientAccountId() != null) {
+                    System.out.print(" | To Account: " + transaction.getRecipientAccountId());
+                }
+                System.out.println();
+            }
+            
+            System.out.println("------------------------------------------------------------");
+            System.out.println("Total Transactions: " + accountTransactions.size());
         }
     }
     
