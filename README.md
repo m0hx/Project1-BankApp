@@ -3,7 +3,7 @@
 # Trello
 [https://trello.com/b/Lk6OxxIR/project-1-bankapp](https://trello.com/b/Lk6OxxIR/project-1-bankapp)
 
-# Technologies Used / Plan to Use:
+# Technologies Used:
 JDK: Oracle OpenJDK 17.0.17  
 IDE: IntelliJ IDEA Community 2025.3  
 
