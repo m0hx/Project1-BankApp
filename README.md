@@ -14,6 +14,23 @@ Libraries (Project Structure -> Libraries -> add) :
 **fontbox-3.0.6.jar**  
 **commons-logging-1.3.5.jar**  
 
+[hr]
+
+# Test Accounts
+[Banker]
+id: 10001
+pw: 0000
+
+[Customer1]
+id: 10002
+pw: 0000
+
+[Customer2]
+id: 10003
+pw: 0000
+
+[hr]
+
 # User Stories
 1. **Access**
    - As a user, I should be able to interact with the bank app using the command-line interface.
