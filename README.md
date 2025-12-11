@@ -7,6 +7,13 @@
 JDK: Oracle OpenJDK 17.0.17  
 IDE: IntelliJ IDEA Community 2025.3  
 
+Libraries (Project Structure -> Libraries -> add) :  
+**jbcrypt-0.4.jar**  
+**pdfbox-3.0.6.jar**  
+**pdfbox-io-3.0.6.jar**  
+**fontbox-3.0.6.jar**  
+**commons-logging-1.3.5.jar**  
+
 # User Stories
 1. **Access**
    - As a user, I should be able to interact with the bank app using the command-line interface.
