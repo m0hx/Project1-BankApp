@@ -1,7 +1,15 @@
 package com.ga.bankapp;
 
 import org.mindrot.jbcrypt.BCrypt;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import java.io.File;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -369,7 +377,8 @@ public class Main {
             System.out.println("4. Transfer Money");
             System.out.println("5. View Transaction History");
             System.out.println("6. View Account Statement");
-            System.out.println("7. Logout");
+            System.out.println("7. Generate PDF Statement");
+            System.out.println("8. Logout");
             System.out.print("Choose an option: ");
             
             int choice = scanner.nextInt();
@@ -395,6 +404,9 @@ public class Main {
                     viewAccountStatement(customer);
                     break;
                 case 7:
+                    generatePDFStatement(customer);
+                    break;
+                case 8:
                     System.out.println("Logged out successfully.");
                     inMenu = false;
                     break;
@@ -713,6 +725,156 @@ public class Main {
             
             System.out.println("------------------------------------------------------------");
             System.out.println("Total Transactions: " + accountTransactions.size());
+        }
+    }
+    
+    // Generate PDF account statement
+    private static void generatePDFStatement(Customer customer) {
+        System.out.println("\n[Generate PDF Statement]");
+        
+        // Select account
+        Account account = selectAccount(customer);
+        if (account == null) {
+            return;
+        }
+        
+        // Load all transactions for this customer
+        List<Transaction> allTransactions = loadTransactions(customer.getId());
+        
+        // Filter transactions for this specific account
+        List<Transaction> accountTransactions = new ArrayList<>();
+        for (Transaction transaction : allTransactions) {
+            if (transaction.getAccountId() == account.getAccountId()) {
+                accountTransactions.add(transaction);
+            }
+        }
+        
+        try {
+            // Create PDF document
+            PDDocument document = new PDDocument();
+            PDPage page = new PDPage();
+            document.addPage(page);
+            
+            PDPageContentStream contentStream = new PDPageContentStream(document, page);
+            contentStream.beginText();
+            contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+            
+            float yPos = 750;
+            float lineHeight = 20;
+            float pageWidth = 612; // Standard PDF page width in points
+            
+            // Header - ACME Bank (centered)
+            String headerText = "[ACME Bank]";
+            // Approximate text width for size 16 font: ~120 points
+            // Center position: (pageWidth - textWidth) / 2
+            float headerX = (pageWidth - 120) / 2; // Approximately centered
+            contentStream.newLineAtOffset(headerX, yPos);
+            contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 16);
+            contentStream.showText(headerText);
+            yPos -= lineHeight * 2;
+            
+            // Title (back to left margin)
+            contentStream.newLineAtOffset(-headerX + 50, -lineHeight * 2);
+            contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+            contentStream.showText("ACCOUNT STATEMENT");
+            yPos -= lineHeight * 2;
+            
+            // Account Information
+            contentStream.newLineAtOffset(0, -lineHeight * 2);
+            contentStream.showText("Account Information:");
+            yPos -= lineHeight;
+            
+            contentStream.newLineAtOffset(0, -lineHeight);
+            contentStream.showText("Account ID: " + account.getAccountId());
+            yPos -= lineHeight;
+            
+            contentStream.newLineAtOffset(0, -lineHeight);
+            contentStream.showText("Account Type: " + account.getAccountType());
+            yPos -= lineHeight;
+            
+            contentStream.newLineAtOffset(0, -lineHeight);
+            contentStream.showText("Debit Card: " + account.getDebitCard().getCardType());
+            yPos -= lineHeight;
+            
+            contentStream.newLineAtOffset(0, -lineHeight);
+            contentStream.showText("Status: " + (account.isActive() ? "Active" : "Deactivated"));
+            yPos -= lineHeight;
+            
+            contentStream.newLineAtOffset(0, -lineHeight);
+            contentStream.showText("Current Balance: $" + String.format("%.2f", account.getBalance()));
+            yPos -= lineHeight * 2;
+            
+            // Transaction History
+            contentStream.newLineAtOffset(0, -lineHeight);
+            contentStream.showText("Transaction History:");
+            yPos -= lineHeight;
+            
+            if (accountTransactions.isEmpty()) {
+                contentStream.newLineAtOffset(0, -lineHeight);
+                contentStream.showText("No transactions found for this account.");
+            } else {
+                contentStream.newLineAtOffset(0, -lineHeight);
+                contentStream.showText("Date & Time | Type | Amount | Balance After");
+                yPos -= lineHeight;
+                
+                for (Transaction transaction : accountTransactions) {
+                    if (yPos < 50) {
+                        contentStream.endText();
+                        contentStream.close();
+                        page = new PDPage();
+                        document.addPage(page);
+                        contentStream = new PDPageContentStream(document, page);
+                        contentStream.beginText();
+                        contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+                        contentStream.newLineAtOffset(50, 750);
+                        yPos = 750;
+                    }
+                    
+                    String dateTime = transaction.getFormattedDateTime();
+                    String type = transaction.getType();
+                    String amount = "$" + String.format("%.2f", transaction.getAmount());
+                    String balance = "$" + String.format("%.2f", transaction.getPostBalance());
+                    String line = dateTime + " | " + type + " | " + amount + " | " + balance;
+                    if (transaction.getRecipientAccountId() != null) {
+                        line += " | To: " + transaction.getRecipientAccountId();
+                    }
+                    
+                    contentStream.newLineAtOffset(0, -lineHeight);
+                    contentStream.showText(line.replace("\n", "").replace("\r", ""));
+                    yPos -= lineHeight;
+                }
+                
+                contentStream.newLineAtOffset(0, -lineHeight);
+                contentStream.showText("Total Transactions: " + accountTransactions.size());
+            }
+            
+            contentStream.endText();
+            contentStream.close();
+            
+            // Create pdf directory if it doesn't exist
+            String pdfDir = "data/pdf";
+            File pdfDirectory = new File(pdfDir);
+            if (!pdfDirectory.exists()) {
+                pdfDirectory.mkdirs();
+            }
+            
+            // Save PDF with timestamp to avoid overwriting
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+            String timestamp = LocalDateTime.now().format(formatter);
+            String fileName = "AccountStatement_" + account.getAccountId() + "_" + timestamp + ".pdf";
+            String fullPath = pdfDir + "/" + fileName;
+            
+            document.save(fullPath);
+            document.close();
+            
+            // Get absolute path for display
+            String absolutePath = new File(fullPath).getAbsolutePath();
+            
+            System.out.println("\nPDF statement generated successfully!");
+            System.out.println("File saved in: " + absolutePath);
+            
+        } catch (IOException e) {
+            System.out.println("Error generating PDF: " + e.getMessage());
         }
     }
     
