@@ -72,4 +72,9 @@ public class Customer implements User {
     public void addAccount(Account account) {
         accounts.add(account);
     }
+    
+    // Set password (used when loading from file or updating password)
+    public void setPassword(String password) {
+        this.password = password;
+    }
 }

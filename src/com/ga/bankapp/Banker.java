@@ -60,4 +60,9 @@ public class Banker implements User {
             return false;
         }
     }
+    
+    // Set password (used when loading from file or updating password)
+    public void setPassword(String password) {
+        this.password = password;
+    }
 }

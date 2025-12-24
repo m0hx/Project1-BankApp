@@ -6,6 +6,7 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import com.ga.bankapp.exception.*;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDate;
@@ -15,7 +16,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Scanner;
+import java.util.stream.Collectors;
 
 public class Main {
     private static final List<User> users = new ArrayList<>();
@@ -71,8 +74,10 @@ public class Main {
             System.out.println("2. Exit");
             System.out.print("Choose an option: ");
 
-            int choice = scanner.nextInt();
-            scanner.nextLine(); // newline
+            int choice = getValidIntInput();
+            if (choice == -1) {
+                continue;
+            }
 
             switch (choice) {
                 case 1:
@@ -110,14 +115,21 @@ public class Main {
             // Create filename: Customer-Name-ID.enc or Banker-Name-ID.enc
             String fileName;
             if (user.getRole() == 'B') {
-                fileName = "data/users/Banker-" + user.getFirstName() + "_" + user.getLastName() + "-" + user.getId() + ".enc";
+                fileName = "data" + File.separator + "users" + File.separator + "Banker-" + user.getFirstName() + "_" + user.getLastName() + "-" + user.getId() + ".enc";
             } else {
-                fileName = "data/users/Customer-" + user.getFirstName() + "_" + user.getLastName() + "-" + user.getId() + ".enc";
+                fileName = "data" + File.separator + "users" + File.separator + "Customer-" + user.getFirstName() + "_" + user.getLastName() + "-" + user.getId() + ".enc";
             }
             
             // Format: ID,firstName,lastName,password,balance,role
             // Always hash password before saving
             String passwordToSave = hashPassword(user.getPassword());
+            
+            // Update password in memory object to hashed version
+            if (user instanceof Banker) {
+                ((Banker) user).setPassword(passwordToSave);
+            } else if (user instanceof Customer) {
+                ((Customer) user).setPassword(passwordToSave);
+            }
             
             String content = user.getId() + "," + 
                            user.getFirstName() + "," + 
@@ -135,7 +147,7 @@ public class Main {
     // Load all users from encrypted files
     private static void loadUsers() {
         try {
-            File usersDir = new File("data/users");
+            File usersDir = new File("data" + File.separator + "users");
             if (!usersDir.exists()) {
                 return; // No users folder, start fresh
             }
@@ -180,7 +192,7 @@ public class Main {
     // Load accounts for a customer
     private static void loadCustomerAccounts(Customer customer) {
         try {
-            File accountsDir = new File("data/accounts");
+            File accountsDir = new File("data" + File.separator + "accounts");
             if (!accountsDir.exists()) {
                 return;
             }
@@ -255,8 +267,12 @@ public class Main {
     // Login method with fraud detection
     private static void login() {
         System.out.print("Enter user ID: ");
-        int userId = scanner.nextInt();
-        scanner.nextLine(); // Consume newline
+        Optional<Integer> userIdOpt = getValidIntInputOptional();
+        if (userIdOpt.isEmpty()) {
+            System.out.println("Invalid user ID! Please enter a valid number.");
+            return;
+        }
+        int userId = userIdOpt.get();
         
         // Check if account is currently locked
         if (isAccountLocked(userId)) {
@@ -370,8 +386,10 @@ public class Main {
             System.out.println("3. Logout");
             System.out.print("Choose an option: ");
             
-            int choice = scanner.nextInt();
-            scanner.nextLine();
+            int choice = getValidIntInput();
+            if (choice == -1) {
+                continue;
+            }
             
             switch (choice) {
                 case 1:
@@ -402,11 +420,14 @@ public class Main {
             System.out.println("5. View Transaction History");
             System.out.println("6. View Account Statement");
             System.out.println("7. Generate PDF Statement");
-            System.out.println("8. Logout");
+            System.out.println("8. Reactivate Account");
+            System.out.println("9. Logout");
             System.out.print("Choose an option: ");
             
-            int choice = scanner.nextInt();
-            scanner.nextLine();
+            int choice = getValidIntInput();
+            if (choice == -1) {
+                continue;
+            }
             
             switch (choice) {
                 case 1:
@@ -431,6 +452,9 @@ public class Main {
                     generatePDFStatement(customer);
                     break;
                 case 8:
+                    reactivateAccount(customer);
+                    break;
+                case 9:
                     System.out.println("Logged out successfully.");
                     inMenu = false;
                     break;
@@ -454,8 +478,14 @@ public class Main {
             System.out.println("\nAccount ID: " + account.getAccountId());
             System.out.println("Type: " + account.getAccountType());
             System.out.println("Balance: $" + String.format("%.2f", account.getBalance()));
+            if (account.getBalance() < 0) {
+                System.out.println("Account is overdrawn!");
+            }
             System.out.println("Card: " + account.getDebitCard().getCardType());
             System.out.println("Status: " + (account.isActive() ? "Active" : "Deactivated"));
+            if (account.getOverdraftCount() > 0) {
+                System.out.println("Overdraft Count: " + account.getOverdraftCount());
+            }
         }
     }
     
@@ -469,29 +499,56 @@ public class Main {
         }
         
         if (!account.isActive()) {
-            System.out.println("This account is deactivated. Please resolve negative balance first.");
+            System.out.println("This account is deactivated due to overdrafts.");
+            System.out.println("Please reactivate your account by resolving the negative balance and paying overdraft fees.");
             return;
         }
         
         System.out.print("Enter amount to withdraw: $");
-        double amount = scanner.nextDouble();
-        scanner.nextLine();
+        Optional<Double> amountOpt = getValidDoubleInput();
+        if (amountOpt.isEmpty()) {
+            System.out.println("Invalid amount! Please enter a positive number.");
+            return;
+        }
+        double amount = amountOpt.get();
         
         if (amount <= 0) {
-            System.out.println("Invalid amount!");
+            System.out.println("Invalid amount! Amount must be greater than zero.");
             return;
+        }
+        
+        // Check if account is already negative and would exceed $100 overdraft limit
+        if (account.getBalance() < 0) {
+            double potentialNewBalance = account.getBalance() - amount - Account.OVERDRAFT_FEE;
+            if (potentialNewBalance < -Account.MAX_OVERDRAFT_AMOUNT) {
+                System.out.println("\nError: Cannot overdraw more than $100 when account is already negative.");
+                System.out.println("Current balance: $" + String.format("%.2f", account.getBalance()));
+                System.out.println("Maximum allowed withdrawal: $" + String.format("%.2f", 
+                    Math.max(0, account.getBalance() + Account.MAX_OVERDRAFT_AMOUNT - Account.OVERDRAFT_FEE)));
+                return;
+            }
         }
         
         // Check daily withdraw limit
         try {
             checkDailyWithdrawLimit(account, amount);
+        } catch (DailyLimitExceededException e) {
+            System.out.println("\nError: " + e.getMessage());
+            return;
         } catch (Exception e) {
             System.out.println("\nError: " + e.getMessage());
             return;
         }
         
+        // Store balance before withdrawal to detect overdraft
+        double balanceBefore = account.getBalance();
+        boolean wasNegative = balanceBefore < 0;
+        
         // Perform withdrawal
         if (account.withdraw(amount)) {
+            double balanceAfter = account.getBalance();
+            boolean isOverdraft = balanceAfter < 0 || (wasNegative && balanceAfter < balanceBefore);
+            
             // Update daily limit tracking
             updateDailyWithdraw(account.getAccountId(), amount);
             // Save account after transaction
@@ -501,9 +558,22 @@ public class Main {
             recordTransaction(account, "WITHDRAW", amount, account.getBalance());
             
             System.out.println("\nWithdrawal successful!");
+            if (isOverdraft) {
+                System.out.println("OVERDRAFT PROTECTION ACTIVATED");
+                System.out.println("ACME overdraft fee of $35.00 has been charged.");
+                System.out.println("Overdraft count: " + account.getOverdraftCount());
+                if (!account.isActive()) {
+                    System.out.println("Account has been deactivated after 2 overdrafts.");
+                    System.out.println("Please reactivate your account by resolving the negative balance.");
+                }
+            }
             System.out.println("New balance: $" + String.format("%.2f", account.getBalance()));
         } else {
-            System.out.println("Withdrawal failed! Insufficient funds or invalid amount.");
+            if (account.getBalance() < 0) {
+                System.out.println("Withdrawal failed! Cannot overdraw more than $100 when account is already negative.");
+            } else {
+                System.out.println("Withdrawal failed! Insufficient funds or invalid amount.");
+            }
         }
     }
     
@@ -517,17 +587,24 @@ public class Main {
         }
         
         System.out.print("Enter amount to deposit: $");
-        double amount = scanner.nextDouble();
-        scanner.nextLine();
+        Optional<Double> amountOpt = getValidDoubleInput();
+        if (amountOpt.isEmpty()) {
+            System.out.println("Invalid amount! Please enter a positive number.");
+            return;
+        }
+        double amount = amountOpt.get();
         
         if (amount <= 0) {
-            System.out.println("Invalid amount!");
+            System.out.println("Invalid amount! Amount must be greater than zero.");
             return;
         }
         
         // Check daily deposit limit
         try {
             checkDailyDepositLimit(account, amount);
+        } catch (DailyLimitExceededException e) {
+            System.out.println("\nError: " + e.getMessage());
+            return;
         } catch (Exception e) {
             System.out.println("\nError: " + e.getMessage());
             return;
@@ -567,16 +644,21 @@ public class Main {
         }
         
         System.out.print("Enter amount to transfer: $");
-        double amount = scanner.nextDouble();
-        scanner.nextLine();
+        Optional<Double> amountOpt = getValidDoubleInput();
+        if (amountOpt.isEmpty()) {
+            System.out.println("Invalid amount! Please enter a positive number.");
+            return;
+        }
+        double amount = amountOpt.get();
         
         if (amount <= 0) {
-            System.out.println("Invalid amount!");
+            System.out.println("Invalid amount! Amount must be greater than zero.");
             return;
         }
         
         if (amount > fromAccount.getBalance()) {
             System.out.println("Insufficient funds!");
+            System.out.println("Available balance: $" + String.format("%.2f", fromAccount.getBalance()));
             return;
         }
         
@@ -585,8 +667,10 @@ public class Main {
         System.out.println("1. My own account");
         System.out.println("2. Another customer's account");
         System.out.print("Choice: ");
-        int choice = scanner.nextInt();
-        scanner.nextLine();
+        int choice = getValidIntInput();
+        if (choice == -1) {
+            return;
+        }
         
         if (choice == 1) {
             // Transfer to own account
@@ -600,13 +684,19 @@ public class Main {
             // Check daily transfer limit (own account)
             try {
                 checkDailyTransferLimit(fromAccount, amount, true);
+            } catch (DailyLimitExceededException e) {
+                System.out.println("\nError: " + e.getMessage());
+                return;
             } catch (Exception e) {
                 System.out.println("\nError: " + e.getMessage());
                 return;
             }
             
             // Perform transfer
-            fromAccount.withdraw(amount);
+            if (!fromAccount.withdraw(amount)) {
+                System.out.println("\nTransfer failed! Withdrawal from source account failed.");
+                return;
+            }
             toAccount.deposit(amount);
             
             // Update daily limit tracking (own account transfer)
@@ -627,8 +717,12 @@ public class Main {
         } else if (choice == 2) {
             // Transfer to another customer
             System.out.print("Enter destination customer ID: ");
-            int toCustomerId = scanner.nextInt();
-            scanner.nextLine();
+            Optional<Integer> toCustomerIdOpt = getValidIntInputOptional();
+            if (toCustomerIdOpt.isEmpty()) {
+                System.out.println("Invalid customer ID!");
+                return;
+            }
+            int toCustomerId = toCustomerIdOpt.get();
             
             Customer toCustomer = findCustomerById(toCustomerId);
             if (toCustomer == null) {
@@ -659,13 +753,19 @@ public class Main {
             // Check daily transfer limit (to other customer)
             try {
                 checkDailyTransferLimit(fromAccount, amount, false);
+            } catch (DailyLimitExceededException e) {
+                System.out.println("\nError: " + e.getMessage());
+                return;
             } catch (Exception e) {
                 System.out.println("\nError: " + e.getMessage());
                 return;
             }
             
             // Perform transfer
-            fromAccount.withdraw(amount);
+            if (!fromAccount.withdraw(amount)) {
+                System.out.println("\nTransfer failed! Withdrawal from source account failed.");
+                return;
+            }
             toAccount.deposit(amount);
             
             // Update daily limit tracking (regular transfer)
@@ -707,10 +807,9 @@ public class Main {
             System.out.println((i + 1) + ". Account " + acc.getAccountId() + " (" + acc.getAccountType() + ") - Balance: $" + String.format("%.2f", acc.getBalance()));
         }
         System.out.print("Choice: ");
-        int choice = scanner.nextInt();
-        scanner.nextLine();
+        int choice = getValidIntInput();
         
-        if (choice < 1 || choice > accounts.size()) {
+        if (choice == -1 || choice < 1 || choice > accounts.size()) {
             System.out.println("Invalid choice!");
             return null;
         }
@@ -718,21 +817,81 @@ public class Main {
         return accounts.get(choice - 1);
     }
     
-    // View transaction history
+    // View transaction history with filtering
     private static void viewTransactionHistory(Customer customer) {
         System.out.println("\n[Transaction History]");
         
-        List<Transaction> transactions = loadTransactions(customer.getId());
+        List<Transaction> allTransactions = loadTransactions(customer.getId());
         
-        if (transactions.isEmpty()) {
+        if (allTransactions.isEmpty()) {
             System.out.println("No transactions found.");
             return;
         }
         
-        System.out.println("\nRecent transactions:");
-        for (Transaction transaction : transactions) {
-            System.out.println(transaction.toString());
+        // Filter options
+        System.out.println("\nFilter Options:");
+        System.out.println("1. All transactions");
+        System.out.println("2. Today");
+        System.out.println("3. Yesterday");
+        System.out.println("4. Last 7 days");
+        System.out.println("5. Last 30 days");
+        System.out.println("6. Last month");
+        System.out.print("Choose filter option: ");
+        
+        int filterChoice = getValidIntInput();
+        if (filterChoice == -1) {
+            filterChoice = 1; // Default to all
         }
+        
+        LocalDate today = LocalDate.now();
+        List<Transaction> filteredTransactions;
+        
+        // Use lambda expressions for filtering
+        switch (filterChoice) {
+            case 2: // Today
+                filteredTransactions = allTransactions.stream()
+                    .filter(t -> t.getDateTime().toLocalDate().equals(today))
+                    .collect(Collectors.toList());
+                break;
+            case 3: // Yesterday
+                LocalDate yesterday = today.minusDays(1);
+                filteredTransactions = allTransactions.stream()
+                    .filter(t -> t.getDateTime().toLocalDate().equals(yesterday))
+                    .collect(Collectors.toList());
+                break;
+            case 4: // Last 7 days
+                LocalDate sevenDaysAgo = today.minusDays(7);
+                filteredTransactions = allTransactions.stream()
+                    .filter(t -> t.getDateTime().toLocalDate().isAfter(sevenDaysAgo) || 
+                                t.getDateTime().toLocalDate().equals(sevenDaysAgo))
+                    .collect(Collectors.toList());
+                break;
+            case 5: // Last 30 days
+                LocalDate thirtyDaysAgo = today.minusDays(30);
+                filteredTransactions = allTransactions.stream()
+                    .filter(t -> t.getDateTime().toLocalDate().isAfter(thirtyDaysAgo) || 
+                                t.getDateTime().toLocalDate().equals(thirtyDaysAgo))
+                    .collect(Collectors.toList());
+                break;
+            case 6: // Last month
+                LocalDate lastMonth = today.minusMonths(1);
+                filteredTransactions = allTransactions.stream()
+                    .filter(t -> t.getDateTime().toLocalDate().isAfter(lastMonth) || 
+                                t.getDateTime().toLocalDate().equals(lastMonth))
+                    .collect(Collectors.toList());
+                break;
+            default: // All transactions
+                filteredTransactions = allTransactions;
+                break;
+        }
+        
+        if (filteredTransactions.isEmpty()) {
+            System.out.println("\nNo transactions found for the selected filter.");
+            return;
+        }
+        
+        System.out.println("\nTransactions (" + filteredTransactions.size() + " found):");
+        filteredTransactions.forEach(transaction -> System.out.println(transaction.toString()));
     }
     
     // View detailed account statement
@@ -918,7 +1077,7 @@ public class Main {
             contentStream.close();
             
             // Create pdf directory if it doesn't exist
-            String pdfDir = "data/pdf";
+            String pdfDir = "data" + File.separator + "pdf";
             File pdfDirectory = new File(pdfDir);
             if (!pdfDirectory.exists()) {
                 boolean created = pdfDirectory.mkdirs();
@@ -931,13 +1090,14 @@ public class Main {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
             String timestamp = LocalDateTime.now().format(formatter);
             String fileName = "AccountStatement_" + account.getAccountId() + "_" + timestamp + ".pdf";
-            String fullPath = pdfDir + "/" + fileName;
             
-            document.save(fullPath);
+            // Use absolute path for saving to avoid path issues
+            File pdfFile = new File(pdfDirectory, fileName);
+            document.save(pdfFile);
             document.close();
             
             // Get absolute path for display
-            String absolutePath = new File(fullPath).getAbsolutePath();
+            String absolutePath = pdfFile.getAbsolutePath();
             
             System.out.println("\nPDF statement generated successfully!");
             System.out.println("File saved in: " + absolutePath);
@@ -969,7 +1129,7 @@ public class Main {
             }
             
             // Save to file
-            String fileName = "data/transactions/Transactions-" + account.getCustomerId() + ".enc";
+            String fileName = "data" + File.separator + "transactions" + File.separator + "Transactions-" + account.getCustomerId() + ".enc";
             
             // Format: transactionId,accountId,customerId,type,amount,dateTime,postBalance,recipientAccountId
             String content = transaction.getTransactionId() + "," +
@@ -993,29 +1153,41 @@ public class Main {
         List<Transaction> transactions = new ArrayList<>();
         
         try {
-            String fileName = "data/transactions/Transactions-" + customerId + ".enc";
+            String fileName = "data" + File.separator + "transactions" + File.separator + "Transactions-" + customerId + ".enc";
             List<String> lines = FileService.readEncryptedFile(fileName);
             
             for (String line : lines) {
                 // Parse: transactionId,accountId,customerId,type,amount,dateTime,postBalance,recipientAccountId
                 String[] parts = line.split(",");
                 if (parts.length >= 7) {
-                    int transactionId = Integer.parseInt(parts[0]);
-                    int accountId = Integer.parseInt(parts[1]);
-                    int custId = Integer.parseInt(parts[2]);
-                    String type = parts[3];
-                    double amount = Double.parseDouble(parts[4]);
-                    double postBalance = Double.parseDouble(parts[6]);
-                    
-                    Transaction transaction;
-                    // Check if there's a recipient account ID (for transfers)
-                    if (parts.length >= 8 && !parts[7].isEmpty() && type.equals("TRANSFER")) {
-                        int recipientId = Integer.parseInt(parts[7]);
-                        transaction = new Transaction(transactionId, accountId, custId, type, amount, postBalance, recipientId);
-                    } else {
-                        transaction = new Transaction(transactionId, accountId, custId, type, amount, postBalance);
+                    try {
+                        int transactionId = Integer.parseInt(parts[0]);
+                        int accountId = Integer.parseInt(parts[1]);
+                        int custId = Integer.parseInt(parts[2]);
+                        String type = parts[3];
+                        double amount = Double.parseDouble(parts[4]);
+                        String dateTimeStr = parts[5];
+                        double postBalance = Double.parseDouble(parts[6]);
+                        
+                        // Parse dateTime from string
+                        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                        LocalDateTime dateTime = LocalDateTime.parse(dateTimeStr, formatter);
+                        
+                        Transaction transaction;
+                        // Check if there's a recipient account ID (for transfers)
+                        if (parts.length >= 8 && !parts[7].isEmpty() && type.equals("TRANSFER")) {
+                            int recipientId = Integer.parseInt(parts[7]);
+                            transaction = new Transaction(transactionId, accountId, custId, type, amount, postBalance, recipientId);
+                        } else {
+                            transaction = new Transaction(transactionId, accountId, custId, type, amount, postBalance);
+                        }
+                        // Set the correct dateTime from file
+                        transaction.setDateTime(dateTime);
+                        transactions.add(transaction);
+                    } catch (Exception e) {
+                        // Skip invalid transaction lines
+                        continue;
                     }
-                    transactions.add(transaction);
                 }
             }
         } catch (Exception e) {
@@ -1102,8 +1274,12 @@ public class Main {
         
         // Find customer
         System.out.print("Enter customer ID: ");
-        int customerId = scanner.nextInt();
-        scanner.nextLine();
+        Optional<Integer> customerIdOpt = getValidIntInputOptional();
+        if (customerIdOpt.isEmpty()) {
+            System.out.println("Invalid customer ID!");
+            return;
+        }
+        int customerId = customerIdOpt.get();
         
         Customer customer = findCustomerById(customerId);
         if (customer == null) {
@@ -1118,8 +1294,11 @@ public class Main {
         System.out.println("1. Checking Account");
         System.out.println("2. Savings Account");
         System.out.print("Choice: ");
-        int accountChoice = scanner.nextInt();
-        scanner.nextLine();
+        int accountChoice = getValidIntInput();
+        if (accountChoice == -1) {
+            System.out.println("Invalid choice!");
+            return;
+        }
         
         String accountType;
         if (accountChoice == 1) {
@@ -1141,8 +1320,12 @@ public class Main {
         
         // Get initial balance
         System.out.print("Enter initial balance: $");
-        double initialBalance = scanner.nextDouble();
-        scanner.nextLine();
+        Optional<Double> balanceOpt = getValidDoubleInput();
+        if (balanceOpt.isEmpty()) {
+            System.out.println("Invalid balance! Please enter a valid number.");
+            return;
+        }
+        double initialBalance = balanceOpt.get();
         
         if (initialBalance < 0) {
             System.out.println("Initial balance cannot be negative!");
@@ -1155,8 +1338,10 @@ public class Main {
         System.out.println("2. Mastercard Titanium");
         System.out.println("3. Mastercard Standard");
         System.out.print("Choice: ");
-        int cardChoice = scanner.nextInt();
-        scanner.nextLine();
+        int cardChoice = getValidIntInput();
+        if (cardChoice == -1) {
+            cardChoice = 3; // Default to Standard
+        }
         
         DebitCard debitCard;
         if (cardChoice == 1) {
@@ -1219,7 +1404,7 @@ public class Main {
         
         // Also check account files
         try {
-            File accountsDir = new File("data/accounts");
+            File accountsDir = new File("data" + File.separator + "accounts");
             if (accountsDir.exists()) {
                 File[] files = accountsDir.listFiles();
                 if (files != null) {
@@ -1247,9 +1432,9 @@ public class Main {
     }
     
     // Check daily withdraw limit
-    private static void checkDailyWithdrawLimit(Account account, double amount) throws Exception {
+    private static void checkDailyWithdrawLimit(Account account, double amount) throws DailyLimitExceededException {
         if (account.getDebitCard() == null) {
-            throw new Exception("Account does not have a debit card");
+            throw new DailyLimitExceededException("Account does not have a debit card");
         }
         
         DailyLimits limits = getDailyLimits(account.getAccountId());
@@ -1257,7 +1442,7 @@ public class Main {
         double limit = account.getDebitCard().getWithdrawLimitPerDay();
         
         if (newTotal > limit) {
-            throw new Exception("Daily withdrawal limit exceeded. Limit: $" + 
+            throw new DailyLimitExceededException("Daily withdrawal limit exceeded. Limit: $" + 
                 String.format("%.2f", limit) + ". Already used: $" + 
                 String.format("%.2f", limits.dailyWithdraw) + ". Remaining: $" + 
                 String.format("%.2f", limit - limits.dailyWithdraw));
@@ -1265,9 +1450,9 @@ public class Main {
     }
     
     // Check daily deposit limit
-    private static void checkDailyDepositLimit(Account account, double amount) throws Exception {
+    private static void checkDailyDepositLimit(Account account, double amount) throws DailyLimitExceededException {
         if (account.getDebitCard() == null) {
-            throw new Exception("Account does not have a debit card");
+            throw new DailyLimitExceededException("Account does not have a debit card");
         }
         
         DailyLimits limits = getDailyLimits(account.getAccountId());
@@ -1276,7 +1461,7 @@ public class Main {
         double newTotal = limits.dailyDeposit + amount;
         
         if (newTotal > limit) {
-            throw new Exception("Daily deposit limit exceeded. Limit: $" + 
+            throw new DailyLimitExceededException("Daily deposit limit exceeded. Limit: $" + 
                 String.format("%.2f", limit) + ". Already used: $" + 
                 String.format("%.2f", limits.dailyDeposit) + ". Remaining: $" + 
                 String.format("%.2f", limit - limits.dailyDeposit));
@@ -1284,9 +1469,9 @@ public class Main {
     }
     
     // Check daily transfer limit
-    private static void checkDailyTransferLimit(Account account, double amount, boolean isOwnAccount) throws Exception {
+    private static void checkDailyTransferLimit(Account account, double amount, boolean isOwnAccount) throws DailyLimitExceededException {
         if (account.getDebitCard() == null) {
-            throw new Exception("Account does not have a debit card");
+            throw new DailyLimitExceededException("Account does not have a debit card");
         }
         
         DailyLimits limits = getDailyLimits(account.getAccountId());
@@ -1298,7 +1483,7 @@ public class Main {
         double newTotal = currentTotal + amount;
         
         if (newTotal > limit) {
-            throw new Exception("Daily transfer limit exceeded. Limit: $" + 
+            throw new DailyLimitExceededException("Daily transfer limit exceeded. Limit: $" + 
                 String.format("%.2f", limit) + ". Already used: $" + 
                 String.format("%.2f", currentTotal) + ". Remaining: $" + 
                 String.format("%.2f", limit - currentTotal));
@@ -1339,11 +1524,138 @@ public class Main {
         limits.dailyTransferOwn += amount;
     }
     
+    // Input validation helper methods
+    private static int getValidIntInput() {
+        try {
+            String input = scanner.nextLine().trim();
+            return Integer.parseInt(input);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid input! Please enter a valid number.");
+            return -1;
+        }
+    }
+    
+    private static Optional<Double> getValidDoubleInput() {
+        try {
+            String input = scanner.nextLine().trim();
+            double value = Double.parseDouble(input);
+            if (value < 0 || Double.isNaN(value) || Double.isInfinite(value)) {
+                return Optional.empty();
+            }
+            return Optional.of(value);
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
+    
+    private static Optional<Integer> getValidIntInputOptional() {
+        try {
+            String input = scanner.nextLine().trim();
+            return Optional.of(Integer.parseInt(input));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
+    
+    // Reactivate account after resolving negative balance
+    private static void reactivateAccount(Customer customer) {
+        System.out.println("\n[Reactivate Account]");
+        
+        // Find deactivated accounts
+        List<Account> deactivatedAccounts = customer.getAccounts().stream()
+            .filter(acc -> !acc.isActive())
+            .collect(Collectors.toList());
+        
+        if (deactivatedAccounts.isEmpty()) {
+            System.out.println("You have no deactivated accounts.");
+            return;
+        }
+        
+        System.out.println("\nDeactivated Accounts:");
+        for (int i = 0; i < deactivatedAccounts.size(); i++) {
+            Account acc = deactivatedAccounts.get(i);
+            System.out.println((i + 1) + ". Account ID: " + acc.getAccountId() + 
+                             " | Balance: $" + String.format("%.2f", acc.getBalance()) +
+                             " | Overdraft Count: " + acc.getOverdraftCount());
+        }
+        
+        System.out.print("\nSelect account to reactivate (enter number): ");
+        Optional<Integer> choiceOpt = getValidIntInputOptional();
+        if (choiceOpt.isEmpty() || choiceOpt.get() < 1 || choiceOpt.get() > deactivatedAccounts.size()) {
+            System.out.println("Invalid selection!");
+            return;
+        }
+        
+        Account account = deactivatedAccounts.get(choiceOpt.get() - 1);
+        
+        // Calculate total amount needed to reactivate
+        // Need to resolve negative balance (overdraft fees are already included in the negative balance)
+        double currentBalance = account.getBalance();
+        double totalNeeded = 0;
+        
+        if (currentBalance < 0) {
+            // Need to bring balance to 0 or positive
+            totalNeeded = Math.abs(currentBalance);
+        }
+        
+        System.out.println("\nAccount Details:");
+        System.out.println("Current Balance: $" + String.format("%.2f", account.getBalance()));
+        System.out.println("Overdraft Count: " + account.getOverdraftCount());
+        System.out.println("Amount needed to reactivate: $" + String.format("%.2f", totalNeeded));
+        
+        if (account.getBalance() >= 0) {
+            // Account balance is already positive, just reactivate
+            account.setActive(true);
+            account.setOverdraftCount(0);
+            saveAccount(account);
+            System.out.println("\nAccount reactivated successfully!");
+            return;
+        }
+        
+        // Select account to deposit money from
+        System.out.println("\nSelect account to deposit money from:");
+        Account sourceAccount = selectAccount(customer);
+        if (sourceAccount == null || sourceAccount.getAccountId() == account.getAccountId()) {
+            System.out.println("Invalid source account!");
+            return;
+        }
+        
+        if (sourceAccount.getBalance() < totalNeeded) {
+            System.out.println("Insufficient funds in source account!");
+            System.out.println("Required: $" + String.format("%.2f", totalNeeded));
+            System.out.println("Available: $" + String.format("%.2f", sourceAccount.getBalance()));
+            return;
+        }
+        
+        // Transfer money to resolve negative balance
+        double transferAmount = totalNeeded;
+        if (!sourceAccount.withdraw(transferAmount)) {
+            System.out.println("Transfer failed! Withdrawal from source account failed.");
+            return;
+        }
+        account.deposit(transferAmount);
+        
+        // Reset overdraft count and reactivate
+        account.setActive(true);
+        account.setOverdraftCount(0);
+        
+        // Save both accounts
+        saveAccount(sourceAccount);
+        saveAccount(account);
+        
+        // Record transactions
+        recordTransaction(sourceAccount, "TRANSFER", transferAmount, sourceAccount.getBalance(), account.getAccountId());
+        recordTransaction(account, "DEPOSIT", transferAmount, account.getBalance());
+        
+        System.out.println("\nAccount reactivated successfully!");
+        System.out.println("Balance after reactivation: $" + String.format("%.2f", account.getBalance()));
+    }
+    
     // Save account to encrypted file
     // Format: accountId,customerId,accountType,balance,isActive,overdraftCount,cardType
     private static void saveAccount(Account account) {
         try {
-            String fileName = "data/accounts/Account-" + account.getAccountId() + ".enc";
+            String fileName = "data" + File.separator + "accounts" + File.separator + "Account-" + account.getAccountId() + ".enc";
             
             String content = account.getAccountId() + "," +
                             account.getCustomerId() + "," +

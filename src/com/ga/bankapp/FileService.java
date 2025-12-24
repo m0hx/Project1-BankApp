@@ -6,6 +6,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
+import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,7 +20,7 @@ public class FileService {
     private static final int GCM_IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 16;
     private static final int KEY_LENGTH = 256;
-    private static final String DATA_DIR = "data/";
+    private static final String DATA_DIR = "data" + File.separator;
     private static final String KEY_FILE = DATA_DIR + "key.dat";
 
     private static SecretKey secretKey;

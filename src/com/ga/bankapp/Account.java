@@ -2,6 +2,11 @@ package com.ga.bankapp;
 
 public abstract class Account {
 
+    // Constants
+    public static final double OVERDRAFT_FEE = 35.0; // ACME overdraft protection fee
+    public static final double MAX_OVERDRAFT_AMOUNT = 100.0; // Maximum overdraft allowed when already negative
+    public static final int MAX_OVERDRAFT_COUNT = 2; // Deactivate after 2 overdrafts
+
     // Fields
     protected int accountId;
     protected int customerId; // Which customer owns this account

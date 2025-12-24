@@ -72,6 +72,11 @@ public class Transaction {
     public Integer getRecipientAccountId() {
         return recipientAccountId;
     }
+    
+    // Set date time (used when loading from file)
+    public void setDateTime(LocalDateTime dateTime) {
+        this.dateTime = dateTime;
+    }
 
     // Format date and time for display
     public String getFormattedDateTime() {
