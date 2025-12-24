@@ -99,9 +99,9 @@ pw: 0000
 
 
 # Non-Implemented / Unresolved Issues
-- Overdraft Protection
-- Account Reactivation
-- Filtering transactions
+~~- Overdraft Protection~~  
+~~- Account Reactivation~~  
+~~- Filtering transactions~~  
 
   
 # Favorite Functions
