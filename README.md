@@ -28,6 +28,11 @@ pw: 0000
 [Customer2]  
 id: 10003  
 pw: 0000  
+
+**Recommended before testing**
+Delete the /data folder so you can create new users/accounts on first app launch if u have any issues with current files.
+On first run it'll ask to create first banker, then u can add other customer accounts by logging into the banker account. 
+also AES key will be generated automatically in /data folder on first run, called **key.dat** this is used to encrypt/decrpyt files, if key mismatch it wont work.
   
 <hr>
 
